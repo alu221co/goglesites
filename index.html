@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Instalando Archivos</title>
+<style>
+  :root{
+    --bg:#000000;
+    --fg:#00ff6a;
+    --muted:#2f5b3a;
+  }
+  html,body{
+    height:100%;
+    margin:0;
+    background:var(--bg);
+    color:var(--fg);
+    font-family: ui-monospace, SFMono-Regular, "Menlo", "Roboto Mono", "Courier New", monospace;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+  }
+
+  /* Layout */
+  .wrap{
+    min-height:100%;
+    display:flex;
+    flex-direction:column;
+  }
+  header{
+    padding:12px 16px;
+    display:flex;
+    align-items:center;
+    gap:12px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+    border-bottom:1px solid rgba(255,255,255,0.03);
+  }
+  header h1{
+    margin:0;font-size:16px;font-weight:700;color:var(--fg);
+  }
+  header p{margin:0;color:var(--muted);font-size:13px}
+
+  /* Canvas fills area */
+  .canvas-wrap{
+    flex:1;
+    position:relative;
+  }
+  canvas{
+    width:100%;
+    height:100%;
+    display:block;
+    background:var(--bg);
+  }
+
+  footer{
+    padding:8px 12px;
+    font-size:12px;
+    color:var(--muted);
+    background: linear-gradient(180deg, transparent, rgba(255,255,255,0.01));
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>INSTALANDO</h1>
+        <p>Instalando archivos v.3 (no seguro)</p>
+      </div>
+    </header>
+
+    <div class="canvas-wrap">
+      <canvas id="c" role="img" aria-label="Animación de caracteres Braille"></canvas>
+    </div>
+
+    <footer>Instalando...</footer>
+  </div>
+
+<script>
+/*
+  Braille Infinito — versión sin controles
+  - Usa canvas y caracteres Unicode Braille U+2800..U+28FF
+  - Diseño: verde sobre negro
+  - Ajustes rápidos: cambia FONT_SIZE o SPEED_MULTIPLIER abajo
+*/
+
+(() => {
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d', { alpha: false });
+
+  // CONFIGURACIÓN: cambia aquí si quieres otros valores
+  const FONT_SIZE = 18;          // px, tamaño de los caracteres
+  const SPEED_MULTIPLIER = 1.0; // 0.2 (lento) .. 3.0 (rápido)
+  const TRAIL_ALPHA = 0.15;     // 0.0..1.0, persistencia del rastro (más bajo = rastro corto)
+
+  // Estado
+  let width = 0;
+  let height = 0;
+  let columns = [];
+  let columnCount = 0;
+  let running = true;
+  let rafId = null;
+  let lastTime = performance.now();
+
+  // Devuelve un caracter Braille aleatorio (mayormente no blanco)
+  function randomBraille() {
+    const includeBlank = Math.random() < 0.02;
+    const cp = includeBlank ? 0x2800 : (0x2801 + Math.floor(Math.random() * 0xFF));
+    return String.fromCodePoint(cp);
+  }
+
+  function resize() {
+    const dpr = Math.max(window.devicePixelRatio || 1, 1);
+    const rect = canvas.getBoundingClientRect();
+    width = Math.floor(rect.width) || Math.floor(window.innerWidth);
+    height = Math.floor(rect.height) || Math.floor(window.innerHeight) - 80;
+
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    setupColumns();
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, width, height);
+  }
+
+  function setupColumns() {
+    const fontSize = FONT_SIZE;
+    columnCount = Math.floor(width / (fontSize * 0.8));
+    if (columnCount < 2) columnCount = 2;
+    columns = new Array(columnCount).fill(0).map(() => {
+      return {
+        x: 0,
+        y: Math.random() * -1000,
+        speed: (0.6 + Math.random() * 1.6) * SPEED_MULTIPLIER,
+        tail: Math.floor(8 + Math.random() * 26),
+        chars: []
+      };
+    });
+  }
+
+  function drawFrame() {
+    // rastro
+    ctx.fillStyle = `rgba(0,0,0,${TRAIL_ALPHA})`;
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.font = `${FONT_SIZE}px monospace`;
+    ctx.textBaseline = 'top';
+
+    // ligera sombra para glow
+    ctx.shadowColor = 'rgba(0, 255, 120, 0.12)';
+    ctx.shadowBlur = Math.max(0, FONT_SIZE * 0.8);
+
+    const columnWidth = width / columnCount;
+
+    for (let i = 0; i < columnCount; i++) {
+      const col = columns[i];
+      col.x = i * columnWidth + (columnWidth - FONT_SIZE) / 2;
+      // avance
+      const speedFactor = (FONT_SIZE / 18) * col.speed;
+      col.y += speedFactor;
+
+      // pequeño ajuste aleatorio de velocidad
+      if (Math.random() < 0.002) col.speed *= (0.7 + Math.random() * 0.6);
+
+      if (col.y > height + col.tail * FONT_SIZE) {
+        col.y = -Math.random() * 200;
+        col.speed = (0.6 + Math.random() * 1.6) * SPEED_MULTIPLIER;
+        col.tail = Math.floor(6 + Math.random() * 28);
+        col.chars.length = 0;
+      }
+
+      // añadir caracteres al frente
+      if (Math.random() < 0.95) {
+        col.chars.unshift(randomBraille());
+        if (col.chars.length > Math.ceil(height / FONT_SIZE) + 20) {
+          col.chars.length = Math.ceil(height / FONT_SIZE) + 20;
+        }
+      }
+
+      // dibujar la columna
+      for (let j = 0; j < col.chars.length; j++) {
+        const ch = col.chars[j];
+        const posY = col.y - j * FONT_SIZE;
+        if (posY < -FONT_SIZE || posY > height) continue;
+
+        const intensity = Math.max(0, 1 - j / (col.tail + 6));
+        const r = 0;
+        const g = Math.floor(255 * (0.45 + 0.55 * intensity));
+        const b = Math.floor(106 * (0.55 + 0.45 * intensity));
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+
+        if (j === 0) {
+          ctx.shadowColor = `rgba(${r},${g},${b},0.25)`;
+          ctx.shadowBlur = Math.max(2, Math.min(14, FONT_SIZE * 0.6));
+        } else {
+          ctx.shadowBlur = 0;
+        }
+
+        ctx.fillText(ch, col.x, posY);
+      }
+    }
+  }
+
+  function loop(now) {
+    if (!running) {
+      rafId = requestAnimationFrame(loop);
+      lastTime = now;
+      return;
+    }
+    const delta = now - lastTime;
+    lastTime = now;
+    drawFrame(delta);
+    rafId = requestAnimationFrame(loop);
+  }
+
+  // Inicialización
+  window.addEventListener('resize', () => {
+    resize();
+  });
+
+  // Start
+  function start() {
+    resize();
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, width, height);
+    if (rafId) cancelAnimationFrame(rafId);
+    lastTime = performance.now();
+    rafId = requestAnimationFrame(loop);
+  }
+
+  start();
+
+})();
+</script>
+</body>
+</html>
